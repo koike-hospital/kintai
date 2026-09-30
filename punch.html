@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>勤怠打刻</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><span>小池病院 勤怠打刻</span><span id="place"></span></div>
+
+  <!-- 読み込み中 -->
+  <div id="v-loading" class="card"><p class="muted">確認しています…</p></div>
+
+  <!-- QRなしで開いた -->
+  <div id="v-noqr" class="card hidden">
+    <p class="name">QRコードを読み取ってください</p>
+    <p class="muted">打刻は院内でのみ行えます。各部署のタブレットに表示されたQRコードを、スマホのカメラで読み取ってください。</p>
+  </div>
+
+  <!-- 初回登録 -->
+  <div id="v-register" class="card hidden">
+    <p class="name">はじめての登録</p>
+    <p class="muted">このスマホを、あなたの打刻用に登録します。登録は最初の1回だけです。</p>
+    <label for="r-no">職員番号</label>
+    <input id="r-no" inputmode="numeric" autocomplete="off">
+    <label for="r-pin">PIN（事務局から配布された4桁）</label>
+    <input id="r-pin" type="password" inputmode="numeric" autocomplete="off">
+    <button id="r-btn" class="b-in primary" style="width:100%;margin-top:16px">登録する</button>
+    <div id="r-msg"></div>
+  </div>
+
+  <!-- 打刻 -->
+  <div id="v-punch" class="card hidden">
+    <div class="name" id="p-name"></div>
+    <div class="muted" id="p-sched"></div>
+    <div class="clock" id="p-clock">--:--</div>
+    <div class="muted" id="p-last"></div>
+    <div class="btns">
+      <button id="b-in" class="b-in">出勤</button>
+      <button id="b-out" class="b-out">退勤</button>
+    </div>
+    <div id="p-reason" class="hidden">
+      <div class="msg warn" id="p-reason-msg"></div>
+      <div class="reason" id="p-reason-list"></div>
+    </div>
+    <div id="p-msg"></div>
+  </div>
+
+  <!-- 完了 -->
+  <div id="v-done" class="card done hidden">
+    <div class="mark">✓</div>
+    <div class="what" id="d-what"></div>
+    <div class="muted" id="d-detail"></div>
+    <div id="d-warn"></div>
+  </div>
+
+  <button id="b-reset" class="b-sub hidden">このスマホの登録を解除する</button>
+</div>
+
+<script src="config.js"></script>
+<script>
+(function () {
+  const TOKEN_KEY = 'kintai_device_token';
+  const t = new URLSearchParams(location.search).get('t');
+  const $ = id => document.getElementById(id);
+  const views = ['v-loading', 'v-noqr', 'v-register', 'v-punch', 'v-done'];
+  let pendingType = null;
+
+  function show(id) {
+    views.forEach(v => $(v).classList.toggle('hidden', v !== id));
+    $('b-reset').classList.toggle('hidden', !(id === 'v-punch' && kintaiStore.get(TOKEN_KEY)));
+  }
+  function msg(el, text, cls) {
+    el.innerHTML = '';
+    if (!text) return;
+    const d = document.createElement('div');
+    d.className = 'msg ' + (cls || 'err');
+    d.textContent = text;
+    el.appendChild(d);
+  }
+  function tick() {
+    const n = new Date();
+    $('p-clock').textContent = n.getHours() + ':' + String(n.getMinutes()).padStart(2, '0');
+  }
+
+  async function load() {
+    if (!t) { show('v-noqr'); return; }
+    show('v-loading');
+    try {
+      const s = await kintaiApi('status', { t, deviceToken: kintaiStore.get(TOKEN_KEY) });
+      $('place').textContent = s.place || '';
+      if (!s.registered) { show('v-register'); return; }
+      $('p-name').textContent = s.name + ' さん';
+      $('p-sched').textContent = s.schedule || '';
+      $('p-last').textContent = s.last ? `前回：${s.last.type} ${s.last.time}` : '';
+      $('b-in').classList.toggle('primary', s.suggested === '出勤');
+      $('b-out').classList.toggle('primary', s.suggested === '退勤');
+      tick(); setInterval(tick, 10000);
+      show('v-punch');
+    } catch (e) {
+      show('v-noqr');
+      msg($('v-noqr'), e.message);
+    }
+  }
+
+  async function register() {
+    const no = $('r-no').value.trim(), pin = $('r-pin').value.trim();
+    if (!no || !pin) { msg($('r-msg'), '職員番号とPINを入力してください'); return; }
+    $('r-btn').disabled = true;
+    try {
+      const r = await kintaiApi('register', { t, no, pin });
+      kintaiStore.set(TOKEN_KEY, r.deviceToken);
+      await load();
+    } catch (e) {
+      msg($('r-msg'), e.message);
+    } finally {
+      $('r-btn').disabled = false;
+    }
+  }
+
+  async function punch(type, reason) {
+    pendingType = type;
+    $('b-in').disabled = $('b-out').disabled = true;
+    msg($('p-msg'), '');
+    try {
+      const r = await kintaiApi('punch', { t, deviceToken: kintaiStore.get(TOKEN_KEY), type, reason: reason || '' });
+      if (r.needReason) { askReason(r.message); return; }
+      $('d-what').textContent = `${r.type} ${r.time}`;
+      $('d-detail').textContent = r.duplicate ? r.message : `${r.name} さん／${r.place || ''}`;
+      msg($('d-warn'), r.warning, 'warn');
+      show('v-done');
+    } catch (e) {
+      msg($('p-msg'), e.message);
+    } finally {
+      $('b-in').disabled = $('b-out').disabled = false;
+    }
+  }
+
+  function askReason(text) {
+    $('p-reason-msg').textContent = text;
+    const list = $('p-reason-list');
+    list.innerHTML = '';
+    KINTAI_REASONS.forEach(r => {
+      const b = document.createElement('button');
+      b.textContent = r;
+      b.onclick = () => { $('p-reason').classList.add('hidden'); punch(pendingType, r); };
+      list.appendChild(b);
+    });
+    $('p-reason').classList.remove('hidden');
+  }
+
+  $('r-btn').onclick = register;
+  $('b-in').onclick = () => punch('出勤');
+  $('b-out').onclick = () => punch('退勤');
+  $('b-reset').onclick = () => {
+    if (confirm('このスマホの登録を解除しますか？\n次回は職員番号とPINで再登録が必要です。')) {
+      kintaiStore.remove(TOKEN_KEY);
+      load();
+    }
+  };
+  load();
+})();
+</script>
+</body>
+</html>

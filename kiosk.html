@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>打刻端末</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .kiosk { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .kiosk { grid-template-columns: 1fr; } }
+  .qrbox { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  #qr { background: #fff; padding: 16px; border-radius: 12px; width: 312px; height: 312px; }
+  #qr img, #qr canvas { width: 280px !important; height: 280px !important; }
+  .big-clock { font-size: 72px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .date { font-size: 20px; color: var(--muted); }
+  .place { font-size: 26px; font-weight: 700; margin-top: 8px; }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; width: 280px; margin-top: 10px; }
+  .bar > div { height: 100%; background: var(--in); width: 100%; }
+</style>
+</head>
+<body>
+<div class="kiosk">
+  <div class="card qrbox">
+    <div id="qr"></div>
+    <div class="bar"><div id="bar"></div></div>
+    <p style="font-size:18px;margin:12px 0 0">スマホのカメラで読み取って打刻</p>
+    <p class="muted" style="margin:4px 0 0">QRコードは30秒ごとに切り替わります</p>
+    <div id="k-err"></div>
+  </div>
+
+  <div class="card">
+    <div class="date" id="k-date"></div>
+    <div class="big-clock" id="k-clock">--:--</div>
+    <div class="place" id="k-place"></div>
+
+    <div id="k-start">
+      <p class="muted" style="margin-top:24px">スマホをお持ちでない方・登録前の方はこちら</p>
+      <button id="k-open" class="b-sub" style="font-size:18px;padding:16px">職員番号とPINで打刻する</button>
+    </div>
+
+    <div id="k-form" class="hidden">
+      <label for="k-no">職員番号</label>
+      <input id="k-no" inputmode="numeric" autocomplete="off">
+      <label for="k-pin">PIN</label>
+      <input id="k-pin" type="password" inputmode="numeric" autocomplete="off">
+      <div class="btns">
+        <button id="k-in" class="b-in primary">出勤</button>
+        <button id="k-out" class="b-out primary">退勤</button>
+      </div>
+      <div id="k-reason" class="hidden">
+        <div class="msg warn" id="k-reason-msg"></div>
+        <div class="reason" id="k-reason-list"></div>
+      </div>
+      <div id="k-msg"></div>
+      <button id="k-cancel" class="b-sub">やめる</button>
+    </div>
+
+    <div id="k-done" class="done hidden" style="margin-top:24px">
+      <div class="mark">✓</div>
+      <div class="what" id="k-what"></div>
+      <div class="muted" id="k-detail"></div>
+      <div id="k-warn"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  if (params.get('key')) kintaiStore.set('kintai_kiosk_key', params.get('key'));
+  const key = params.get('key') || kintaiStore.get('kintai_kiosk_key');
+  const punchUrl = new URL('punch.html', location.href).href;
+  let qr = null, refreshAt = 0, period = 30000, pendingType = null, resetTimer = null;
+
+  function msg(el, text, cls) {
+    el.innerHTML = '';
+    if (!text) return;
+    const d = document.createElement('div');
+    d.className = 'msg ' + (cls || 'err');
+    d.textContent = text;
+    el.appendChild(d);
+  }
+
+  function tick() {
+    const n = new Date();
+    $('k-clock').textContent = n.getHours() + ':' + String(n.getMinutes()).padStart(2, '0');
+    $('k-date').textContent = `${n.getMonth() + 1}月${n.getDate()}日（${'日月火水木金土'[n.getDay()]}）`;
+    const left = Math.max(0, refreshAt - Date.now());
+    $('bar').style.width = (left / period * 100) + '%';
+  }
+
+  async function refreshQr() {
+    if (!key) { msg($('k-err'), '端末キーが設定されていません。URLの末尾に ?key=… を付けて開いてください'); return; }
+    try {
+      const r = await kintaiApi('kioskToken', { key });
+      $('k-place').textContent = r.place;
+      const text = punchUrl + '?t=' + encodeURIComponent(r.token);
+      if (!qr) qr = new QRCode($('qr'), { text, width: 280, height: 280, correctLevel: QRCode.CorrectLevel.M });
+      else qr.makeCode(text);
+      msg($('k-err'), '');
+      refreshAt = Date.now() + r.refreshMs;
+      setTimeout(refreshQr, r.refreshMs + 300);
+    } catch (e) {
+      msg($('k-err'), e.message + '（10秒後に再接続します）');
+      setTimeout(refreshQr, 10000);
+    }
+  }
+
+  function openForm() {
+    $('k-start').classList.add('hidden');
+    $('k-done').classList.add('hidden');
+    $('k-form').classList.remove('hidden');
+    $('k-no').focus();
+    armReset();
+  }
+  function closeForm() {
+    $('k-form').classList.add('hidden');
+    $('k-reason').classList.add('hidden');
+    $('k-done').classList.add('hidden');
+    $('k-start').classList.remove('hidden');
+    $('k-no').value = $('k-pin').value = '';
+    msg($('k-msg'), '');
+  }
+  // 入力途中で放置されたら60秒で初期画面に戻す（PINの覗き見・入れっぱなし防止）
+  function armReset(ms) {
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(closeForm, ms || 60000);
+  }
+
+  async function punch(type, reason) {
+    pendingType = type;
+    const no = $('k-no').value.trim(), pin = $('k-pin').value.trim();
+    if (!no || !pin) { msg($('k-msg'), '職員番号とPINを入力してください'); return; }
+    $('k-in').disabled = $('k-out').disabled = true;
+    msg($('k-msg'), '');
+    armReset();
+    try {
+      const r = await kintaiApi('kioskPunch', { key, no, pin, type, reason: reason || '' });
+      if (r.needReason) { askReason(r.message); return; }
+      $('k-form').classList.add('hidden');
+      $('k-reason').classList.add('hidden');
+      $('k-what').textContent = `${r.type} ${r.time}`;
+      $('k-detail').textContent = r.duplicate ? r.message : `${r.name} さん`;
+      msg($('k-warn'), r.warning, 'warn');
+      $('k-done').classList.remove('hidden');
+      $('k-no').value = $('k-pin').value = '';
+      armReset(5000);
+    } catch (e) {
+      msg($('k-msg'), e.message);
+    } finally {
+      $('k-in').disabled = $('k-out').disabled = false;
+    }
+  }
+
+  function askReason(text) {
+    $('k-reason-msg').textContent = text;
+    const list = $('k-reason-list');
+    list.innerHTML = '';
+    KINTAI_REASONS.forEach(r => {
+      const b = document.createElement('button');
+      b.textContent = r;
+      b.onclick = () => { $('k-reason').classList.add('hidden'); punch(pendingType, r); };
+      list.appendChild(b);
+    });
+    $('k-reason').classList.remove('hidden');
+  }
+
+  // 画面を消灯させない（対応ブラウザのみ）
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch (e) { /* 非対応 */ }
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
+
+  $('k-open').onclick = openForm;
+  $('k-cancel').onclick = closeForm;
+  $('k-in').onclick = () => punch('出勤');
+  $('k-out').onclick = () => punch('退勤');
+  setInterval(tick, 250);
+  tick();
+  keepAwake();
+  refreshQr();
+})();
+</script>
+</body>
+</html>

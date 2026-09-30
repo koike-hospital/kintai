@@ -1,0 +1,58 @@
+:root {
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --text: #1f2933;
+  --muted: #5f6b7a;
+  --line: #d9dee5;
+  --in: #1f6feb;
+  --in-soft: #e3edfd;
+  --out: #c2410c;
+  --out-soft: #fdecdf;
+  --ok: #15803d;
+  --warn: #b45309;
+  --err: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418; --card: #1b2027; --text: #e6e9ee; --muted: #9aa5b1; --line: #313844;
+    --in: #5b9bff; --in-soft: #1c2b44; --out: #f28b4b; --out-soft: #3a2518;
+    --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  font-size: 17px; line-height: 1.6; -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 480px; margin: 0 auto; padding: 16px; }
+.header { font-size: 14px; color: var(--muted); display: flex; justify-content: space-between; align-items: baseline; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-top: 12px; }
+.name { font-size: 22px; font-weight: 700; }
+.muted { color: var(--muted); font-size: 14px; }
+.clock { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+button {
+  font: inherit; border: 2px solid transparent; border-radius: 12px; padding: 18px 8px; cursor: pointer;
+  font-weight: 700; font-size: 20px;
+}
+button:disabled { opacity: .5; cursor: default; }
+.b-in { background: var(--in-soft); color: var(--in); border-color: var(--in); }
+.b-out { background: var(--out-soft); color: var(--out); border-color: var(--out); }
+.b-in.primary { background: var(--in); color: #fff; }
+.b-out.primary { background: var(--out); color: #fff; }
+.b-sub { background: transparent; color: var(--muted); border: 1px solid var(--line); font-size: 15px; padding: 12px; font-weight: 400; width: 100%; margin-top: 10px; }
+label { display: block; font-size: 14px; color: var(--muted); margin-top: 12px; }
+input {
+  font: inherit; font-size: 22px; width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); letter-spacing: 2px;
+}
+.reason { display: grid; gap: 8px; margin-top: 12px; }
+.reason button { font-size: 16px; font-weight: 400; background: var(--bg); color: var(--text); border: 1px solid var(--line); text-align: left; padding: 14px; }
+.msg { margin-top: 12px; padding: 12px; border-radius: 10px; font-size: 15px; }
+.msg.err { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+.msg.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+.done { text-align: center; }
+.done .mark { font-size: 56px; color: var(--ok); line-height: 1; }
+.done .what { font-size: 26px; font-weight: 700; margin-top: 8px; }
+.hidden { display: none !important; }
