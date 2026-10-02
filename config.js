@@ -1,5 +1,5 @@
 // GASをウェブアプリとして公開したときのURL（…/exec）に書き換える
-window.KINTAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbwRYETHuym4Yxf0EewMaX9_5jFhqbLbAiwSKK_ne7k1FyIyW3FwR750vNxVLTsRMf5a0A/exec';
+window.KINTAI_GAS_URL = 'https://script.google.com/macros/s/AKfycby9XrftQ25N1kXKE4Gnuvy6x7PDDaYUqQZEeJvdCc9fhEgjeUYg84TJeFqe72_wXkEz9w/exec';
 
 /** GAS APIの呼び出し（text/plain で送るとCORSの事前確認が不要になる） */
 window.kintaiApi = async function (action, payload) {
