@@ -56,3 +56,22 @@ input {
 .done .mark { font-size: 56px; color: var(--ok); line-height: 1; }
 .done .what { font-size: 26px; font-weight: 700; margin-top: 8px; }
 .hidden { display: none !important; }
+
+/* 休暇申請 */
+select {
+  font: inherit; font-size: 18px; width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text);
+}
+input[type="date"], input[type="text"] { letter-spacing: 0; font-size: 18px; }
+.msg.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.leave-list { display: grid; gap: 8px; margin-top: 8px; }
+.leave-item {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 15px;
+}
+.badge { font-size: 13px; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.st-wait { color: var(--warn); }
+.st-ok { color: var(--ok); }
+.st-ng { color: var(--err); }
+.st-off { color: var(--muted); }
+.b-link { background: none; border: none; color: var(--err); font-size: 14px; font-weight: 400; padding: 4px; text-decoration: underline; }

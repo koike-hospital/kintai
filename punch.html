@@ -23,13 +23,20 @@
   <!-- 初回登録 -->
   <div id="v-register" class="card hidden">
     <p class="name">はじめての登録</p>
-    <p class="muted">このスマホを、あなたの打刻用に登録します。登録は最初の1回だけです。</p>
+    <p class="muted">このスマホを、あなたの打刻用に登録申請します。事務局が承認すると、次からQRを読み取るだけで打刻できます。</p>
     <label for="r-no">職員番号</label>
     <input id="r-no" inputmode="numeric" autocomplete="off">
     <label for="r-pin">PIN（事務局から配布された4桁）</label>
     <input id="r-pin" type="password" inputmode="numeric" autocomplete="off">
-    <button id="r-btn" class="b-in primary" style="width:100%;margin-top:16px">登録する</button>
+    <button id="r-btn" class="b-in primary" style="width:100%;margin-top:16px">登録を申請する</button>
     <div id="r-msg"></div>
+  </div>
+
+  <!-- 承認待ち -->
+  <div id="v-pending" class="card hidden">
+    <p class="name" id="w-name"></p>
+    <p><strong>登録申請を受け付けました。</strong></p>
+    <p class="muted">事務局が承認すると、このスマホで打刻できるようになります。承認されるまでは、タブレットの「職員番号とPINで打刻する」を使ってください。</p>
   </div>
 
   <!-- 打刻 -->
@@ -47,7 +54,11 @@
       <div class="reason" id="p-reason-list"></div>
     </div>
     <div id="p-msg"></div>
+    <button id="b-leave" class="b-sub">休暇の申請・確認（事前の申請／急なお休みの後日申請）</button>
   </div>
+
+  <!-- 休暇の申請 -->
+  <div id="v-leave" class="card hidden"></div>
 
   <!-- 完了 -->
   <div id="v-done" class="card done hidden">
@@ -55,18 +66,20 @@
     <div class="what" id="d-what"></div>
     <div class="muted" id="d-detail"></div>
     <div id="d-warn"></div>
+    <button id="d-leave" class="b-sub">休暇の申請・確認</button>
   </div>
 
   <button id="b-reset" class="b-sub hidden">このスマホの登録を解除する</button>
 </div>
 
 <script src="config.js"></script>
+<script src="leave.js"></script>
 <script>
 (function () {
   const TOKEN_KEY = 'kintai_device_token';
   const t = new URLSearchParams(location.search).get('t');
   const $ = id => document.getElementById(id);
-  const views = ['v-loading', 'v-noqr', 'v-register', 'v-punch', 'v-done'];
+  const views = ['v-loading', 'v-noqr', 'v-register', 'v-pending', 'v-punch', 'v-leave', 'v-done'];
   let pendingType = null;
 
   function show(id) {
@@ -93,6 +106,7 @@
       const s = await kintaiApi('status', { t, deviceToken: kintaiStore.get(TOKEN_KEY) });
       $('place').textContent = s.place || '';
       if (!s.registered) { show('v-register'); return; }
+      if (s.pending) { $('w-name').textContent = s.name + ' さん'; show('v-pending'); return; }
       $('p-name').textContent = s.name + ' さん';
       $('p-sched').textContent = s.schedule || '';
       $('p-last').textContent = s.last ? `前回：${s.last.type} ${s.last.time}` : '';
@@ -152,7 +166,14 @@
     $('p-reason').classList.remove('hidden');
   }
 
+  function openLeave() {
+    show('v-leave');
+    KintaiLeave.open($('v-leave'), { t, deviceToken: kintaiStore.get(TOKEN_KEY) }, { onBack: () => show('v-punch') });
+  }
+
   $('r-btn').onclick = register;
+  $('b-leave').onclick = openLeave;
+  $('d-leave').onclick = openLeave;
   $('b-in').onclick = () => punch('出勤');
   $('b-out').onclick = () => punch('退勤');
   $('b-reset').onclick = () => {

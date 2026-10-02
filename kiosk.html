@@ -25,7 +25,7 @@
     <div id="qr"></div>
     <div class="bar"><div id="bar"></div></div>
     <p style="font-size:18px;margin:12px 0 0">スマホのカメラで読み取って打刻</p>
-    <p class="muted" style="margin:4px 0 0">QRコードは30秒ごとに切り替わります</p>
+    <p class="muted" style="margin:4px 0 0">QRコードは1分ごとに切り替わります</p>
     <div id="k-err"></div>
   </div>
 
@@ -36,7 +36,7 @@
 
     <div id="k-start">
       <p class="muted" style="margin-top:24px">スマホをお持ちでない方・登録前の方はこちら</p>
-      <button id="k-open" class="b-sub" style="font-size:18px;padding:16px">職員番号とPINで打刻する</button>
+      <button id="k-open" class="b-sub" style="font-size:18px;padding:16px">職員番号とPINで打刻・休暇申請</button>
     </div>
 
     <div id="k-form" class="hidden">
@@ -53,8 +53,11 @@
         <div class="reason" id="k-reason-list"></div>
       </div>
       <div id="k-msg"></div>
+      <button id="k-leave-open" class="b-sub">休暇の申請・確認</button>
       <button id="k-cancel" class="b-sub">やめる</button>
     </div>
+
+    <div id="k-leave" class="hidden" style="margin-top:16px"></div>
 
     <div id="k-done" class="done hidden" style="margin-top:24px">
       <div class="mark">✓</div>
@@ -67,6 +70,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="config.js"></script>
+<script src="leave.js"></script>
 <script>
 (function () {
   const $ = id => document.getElementById(id);
@@ -74,7 +78,7 @@
   if (params.get('key')) kintaiStore.set('kintai_kiosk_key', params.get('key'));
   const key = params.get('key') || kintaiStore.get('kintai_kiosk_key');
   const punchUrl = new URL('punch.html', location.href).href;
-  let qr = null, refreshAt = 0, period = 30000, pendingType = null, resetTimer = null;
+  let qr = null, refreshAt = 0, period = 60000, pendingType = null, resetTimer = null;
 
   function msg(el, text, cls) {
     el.innerHTML = '';
@@ -102,6 +106,7 @@
       if (!qr) qr = new QRCode($('qr'), { text, width: 280, height: 280, correctLevel: QRCode.CorrectLevel.M });
       else qr.makeCode(text);
       msg($('k-err'), '');
+      if (r.windowMs) period = r.windowMs;
       refreshAt = Date.now() + r.refreshMs;
       setTimeout(refreshQr, r.refreshMs + 300);
     } catch (e) {
@@ -121,6 +126,8 @@
     $('k-form').classList.add('hidden');
     $('k-reason').classList.add('hidden');
     $('k-done').classList.add('hidden');
+    $('k-leave').classList.add('hidden');
+    $('k-leave').innerHTML = '';
     $('k-start').classList.remove('hidden');
     $('k-no').value = $('k-pin').value = '';
     msg($('k-msg'), '');
@@ -177,6 +184,15 @@
 
   $('k-open').onclick = openForm;
   $('k-cancel').onclick = closeForm;
+  // 休暇の申請：入力に時間がかかるので、放置時の自動リセットは3分にする
+  $('k-leave-open').onclick = () => {
+    const no = $('k-no').value.trim(), pin = $('k-pin').value.trim();
+    if (!no || !pin) { msg($('k-msg'), '職員番号とPINを入力してください'); return; }
+    $('k-form').classList.add('hidden');
+    $('k-leave').classList.remove('hidden');
+    armReset(180000);
+    KintaiLeave.open($('k-leave'), { key, no, pin }, { onBack: closeForm, onActivity: () => armReset(180000) });
+  };
   $('k-in').onclick = () => punch('出勤');
   $('k-out').onclick = () => punch('退勤');
   setInterval(tick, 250);
