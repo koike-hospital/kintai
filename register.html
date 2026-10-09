@@ -4,26 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>スマホの登録申請</title>
+<title>勤怠打刻の登録</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
-  <div class="header"><span>小池病院 勤怠打刻</span><span>スマホの登録申請</span></div>
+  <div class="header"><span>小池病院 勤怠打刻</span><span>登録</span></div>
 
   <div id="v-loading" class="card"><p class="muted">確認しています…</p></div>
 
-  <!-- 申請 -->
+  <!-- はじめての方の登録（PINを自分で決める） -->
+  <div id="v-signup" class="card hidden">
+    <div id="s-box"></div>
+    <button id="s-to-pin" class="b-sub">すでにPINをお持ちの方（このスマホだけを登録する）</button>
+    <p class="muted" style="margin-top:16px">※ スマホでの打刻は任意です。スマホを使わない方は、院内のタブレットの「はじめての方（登録）」から登録できます。</p>
+  </div>
+
+  <!-- PINをお持ちの方：スマホだけを申請 -->
   <div id="v-form" class="card hidden">
-    <p class="name">スマホの登録申請</p>
+    <p class="name">スマホの登録申請（PINをお持ちの方）</p>
     <p class="muted">このスマホを、あなたの打刻用として登録申請します。事務局が承認すると、院内のタブレットのQRコードを読み取るだけで打刻できるようになります。</p>
     <label for="f-no">職員番号</label>
     <input id="f-no" inputmode="numeric" autocomplete="off">
-    <label for="f-pin">PIN（事務局から配布された4桁）</label>
+    <label for="f-pin">PIN（4桁）</label>
     <input id="f-pin" type="password" inputmode="numeric" autocomplete="off">
     <button id="f-btn" class="b-in primary" style="width:100%;margin-top:16px">登録を申請する</button>
     <div id="f-msg"></div>
     <p class="muted" style="margin-top:16px">※ 申請は、打刻に使うスマホから行ってください。ほかのスマホやパソコンから申請しても、そのスマホでは打刻できません。</p>
+    <button id="f-to-signup" class="b-sub">はじめての方はこちら</button>
   </div>
 
   <!-- 承認待ち -->
@@ -45,11 +53,12 @@
 </div>
 
 <script src="config.js"></script>
+<script src="signup.js"></script>
 <script>
 (function () {
   const TOKEN_KEY = 'kintai_device_token';
   const $ = id => document.getElementById(id);
-  const views = ['v-loading', 'v-form', 'v-pending', 'v-ok'];
+  const views = ['v-loading', 'v-signup', 'v-form', 'v-pending', 'v-ok'];
 
   function show(id) { views.forEach(v => $(v).classList.toggle('hidden', v !== id)); }
   function msg(el, text, cls) {
@@ -61,9 +70,17 @@
     el.appendChild(d);
   }
 
+  function openSignup() {
+    show('v-signup');
+    KintaiSignup.open($('s-box'), {}, {
+      phone: true,
+      onDone: r => { if (r.deviceToken) kintaiStore.set(TOKEN_KEY, r.deviceToken); check(false); },
+    });
+  }
+
   async function check(manual) {
     const token = kintaiStore.get(TOKEN_KEY);
-    if (!token) { show('v-form'); return; }
+    if (!token) { openSignup(); return; }
     try {
       const s = await kintaiApi('phoneStatus', { deviceToken: token });
       if (s.status === 'approved') {
@@ -74,7 +91,7 @@
         show('v-pending');
         if (manual) msg($('w-msg'), 'まだ承認されていません。しばらくしてから確認してください。', 'warn');
       } else {
-        show('v-form');
+        openSignup();
       }
     } catch (e) {
       show('v-form');
@@ -100,6 +117,8 @@
   }
 
   $('f-btn').onclick = apply;
+  $('s-to-pin').onclick = () => show('v-form');
+  $('f-to-signup').onclick = openSignup;
   $('w-check').onclick = () => check(true);
   check(false);
 })();

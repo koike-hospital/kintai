@@ -21,15 +21,20 @@
   </div>
 
   <!-- 初回登録 -->
+  <div id="v-signup" class="card hidden">
+    <div id="s-box"></div>
+    <button id="s-to-pin" class="b-sub">すでにPINをお持ちの方（このスマホだけを登録する）</button>
+  </div>
   <div id="v-register" class="card hidden">
-    <p class="name">はじめての登録</p>
+    <p class="name">スマホの登録（PINをお持ちの方）</p>
     <p class="muted">このスマホを、あなたの打刻用に登録申請します。事務局が承認すると、次からQRを読み取るだけで打刻できます。</p>
     <label for="r-no">職員番号</label>
     <input id="r-no" inputmode="numeric" autocomplete="off">
-    <label for="r-pin">PIN（事務局から配布された4桁）</label>
+    <label for="r-pin">PIN（4桁）</label>
     <input id="r-pin" type="password" inputmode="numeric" autocomplete="off">
     <button id="r-btn" class="b-in primary" style="width:100%;margin-top:16px">登録を申請する</button>
     <div id="r-msg"></div>
+    <button id="r-to-signup" class="b-sub">はじめての方はこちら</button>
   </div>
 
   <!-- 承認待ち -->
@@ -54,11 +59,8 @@
       <div class="reason" id="p-reason-list"></div>
     </div>
     <div id="p-msg"></div>
-    <button id="b-leave" class="b-sub">休暇の申請・確認（事前の申請／急なお休みの後日申請）</button>
   </div>
 
-  <!-- 休暇の申請 -->
-  <div id="v-leave" class="card hidden"></div>
 
   <!-- 完了 -->
   <div id="v-done" class="card done hidden">
@@ -66,20 +68,19 @@
     <div class="what" id="d-what"></div>
     <div class="muted" id="d-detail"></div>
     <div id="d-warn"></div>
-    <button id="d-leave" class="b-sub">休暇の申請・確認</button>
   </div>
 
   <button id="b-reset" class="b-sub hidden">このスマホの登録を解除する</button>
 </div>
 
 <script src="config.js"></script>
-<script src="leave.js"></script>
+<script src="signup.js"></script>
 <script>
 (function () {
   const TOKEN_KEY = 'kintai_device_token';
   const t = new URLSearchParams(location.search).get('t');
   const $ = id => document.getElementById(id);
-  const views = ['v-loading', 'v-noqr', 'v-register', 'v-pending', 'v-punch', 'v-leave', 'v-done'];
+  const views = ['v-loading', 'v-noqr', 'v-signup', 'v-register', 'v-pending', 'v-punch', 'v-done'];
   let pendingType = null;
 
   function show(id) {
@@ -105,7 +106,7 @@
     try {
       const s = await kintaiApi('status', { t, deviceToken: kintaiStore.get(TOKEN_KEY) });
       $('place').textContent = s.place || '';
-      if (!s.registered) { show('v-register'); return; }
+      if (!s.registered) { openSignup(); return; }
       if (s.pending) { $('w-name').textContent = s.name + ' さん'; show('v-pending'); return; }
       $('p-name').textContent = s.name + ' さん';
       $('p-sched').textContent = s.schedule || '';
@@ -118,6 +119,19 @@
       show('v-noqr');
       msg($('v-noqr'), e.message);
     }
+  }
+
+  function openSignup() {
+    show('v-signup');
+    KintaiSignup.open($('s-box'), { t }, {
+      phone: true,
+      // 入力に時間がかかるとQRの有効期限が切れるので、読み込み直さずにそのまま承認待ちの表示にする
+      onDone: r => {
+        if (r.deviceToken) kintaiStore.set(TOKEN_KEY, r.deviceToken);
+        $('w-name').textContent = r.name + ' さん';
+        show('v-pending');
+      },
+    });
   }
 
   async function register() {
@@ -166,14 +180,9 @@
     $('p-reason').classList.remove('hidden');
   }
 
-  function openLeave() {
-    show('v-leave');
-    KintaiLeave.open($('v-leave'), { t, deviceToken: kintaiStore.get(TOKEN_KEY) }, { onBack: () => show('v-punch') });
-  }
-
   $('r-btn').onclick = register;
-  $('b-leave').onclick = openLeave;
-  $('d-leave').onclick = openLeave;
+  $('s-to-pin').onclick = () => show('v-register');
+  $('r-to-signup').onclick = openSignup;
   $('b-in').onclick = () => punch('出勤');
   $('b-out').onclick = () => punch('退勤');
   $('b-reset').onclick = () => {
