@@ -74,7 +74,11 @@
     show('v-signup');
     KintaiSignup.open($('s-box'), {}, {
       phone: true,
-      onDone: r => { if (r.deviceToken) kintaiStore.set(TOKEN_KEY, r.deviceToken); check(false); },
+      onDone: async r => {
+        if (r.deviceToken) kintaiStore.set(TOKEN_KEY, r.deviceToken);
+        await check(false);
+        if (r.dept) msg($('w-msg'), `登録された部署：${r.dept}（違うときは事務局に申し出てください）`, 'ok');
+      },
     });
   }
 

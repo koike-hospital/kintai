@@ -198,7 +198,7 @@
         $('k-signup').innerHTML = '';
         $('k-signup').classList.add('hidden');
         $('k-what').textContent = '登録を申請しました';
-        $('k-detail').textContent = `${r.name} さん：事務局が承認すると、職員番号と決めたPINで打刻できるようになります`;
+        $('k-detail').textContent = `${r.name} さん（${r.dept || ''}）：事務局が承認すると、職員番号と決めたPINで打刻できるようになります。部署が違うときは事務局に申し出てください`;
         msg($('k-warn'), '');
         $('k-done').classList.remove('hidden');
         armReset(10000);

@@ -128,7 +128,7 @@
       // 入力に時間がかかるとQRの有効期限が切れるので、読み込み直さずにそのまま承認待ちの表示にする
       onDone: r => {
         if (r.deviceToken) kintaiStore.set(TOKEN_KEY, r.deviceToken);
-        $('w-name').textContent = r.name + ' さん';
+        $('w-name').textContent = r.name + ' さん' + (r.dept ? `（${r.dept}）` : '');
         show('v-pending');
       },
     });
