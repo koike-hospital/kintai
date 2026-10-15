@@ -77,7 +77,7 @@
       onDone: async r => {
         if (r.deviceToken) kintaiStore.set(TOKEN_KEY, r.deviceToken);
         await check(false);
-        if (r.dept) msg($('w-msg'), `登録された部署：${r.dept}（違うときは事務局に申し出てください）`, 'ok');
+        if (r.message) msg($('w-msg'), r.message, r.needsCheck ? 'warn' : 'ok');
       },
     });
   }

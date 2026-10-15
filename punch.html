@@ -42,6 +42,7 @@
     <p class="name" id="w-name"></p>
     <p><strong>登録申請を受け付けました。</strong></p>
     <p class="muted">事務局が承認すると、このスマホで打刻できるようになります。承認されるまでは、タブレットの「職員番号とPINで打刻する」を使ってください。</p>
+    <div id="w-msg"></div>
   </div>
 
   <!-- 打刻 -->
@@ -128,8 +129,9 @@
       // 入力に時間がかかるとQRの有効期限が切れるので、読み込み直さずにそのまま承認待ちの表示にする
       onDone: r => {
         if (r.deviceToken) kintaiStore.set(TOKEN_KEY, r.deviceToken);
-        $('w-name').textContent = r.name + ' さん' + (r.dept ? `（${r.dept}）` : '');
+        $('w-name').textContent = r.name + ' さん';
         show('v-pending');
+        if (r.message) msg($('w-msg'), r.message, r.needsCheck ? 'warn' : 'ok');
       },
     });
   }
