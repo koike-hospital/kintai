@@ -82,7 +82,7 @@
   const t = new URLSearchParams(location.search).get('t');
   const $ = id => document.getElementById(id);
   const views = ['v-loading', 'v-noqr', 'v-signup', 'v-register', 'v-pending', 'v-punch', 'v-done'];
-  let pendingType = null;
+  let pendingType = null, pendingConfirmed = false;
 
   function show(id) {
     views.forEach(v => $(v).classList.toggle('hidden', v !== id));
@@ -151,12 +151,15 @@
     }
   }
 
-  async function punch(type, reason) {
+  async function punch(type, reason, confirmed) {
     pendingType = type;
+    pendingConfirmed = !!confirmed;
     $('b-in').disabled = $('b-out').disabled = true;
     msg($('p-msg'), '');
     try {
-      const r = await kintaiApi('punch', { t, deviceToken: kintaiStore.get(TOKEN_KEY), type, reason: reason || '' });
+      const r = await kintaiApi('punch', { t, deviceToken: kintaiStore.get(TOKEN_KEY), type, reason: reason || '', confirm: !!confirmed });
+      // 押し間違いの確認（出勤中に出勤、出勤なしで退勤）
+      if (r.needConfirm) { if (confirm(r.message)) { await punch(type, reason, true); } return; }
       if (r.needReason) { askReason(r.message); return; }
       $('d-what').textContent = `${r.type} ${r.time}`;
       $('d-detail').textContent = r.duplicate ? r.message : `${r.name} さん／${r.place || ''}`;
@@ -176,7 +179,7 @@
     KINTAI_REASONS.forEach(r => {
       const b = document.createElement('button');
       b.textContent = r;
-      b.onclick = () => { $('p-reason').classList.add('hidden'); punch(pendingType, r); };
+      b.onclick = () => { $('p-reason').classList.add('hidden'); punch(pendingType, r, pendingConfirmed); };
       list.appendChild(b);
     });
     $('p-reason').classList.remove('hidden');

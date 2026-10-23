@@ -79,7 +79,7 @@
   if (params.get('key')) kintaiStore.set('kintai_kiosk_key', params.get('key'));
   const key = params.get('key') || kintaiStore.get('kintai_kiosk_key');
   const punchUrl = new URL('punch.html', location.href).href;
-  let qr = null, refreshAt = 0, period = 60000, pendingType = null, resetTimer = null;
+  let qr = null, refreshAt = 0, period = 60000, pendingType = null, pendingConfirmed = false, resetTimer = null;
 
   function msg(el, text, cls) {
     el.innerHTML = '';
@@ -139,15 +139,18 @@
     resetTimer = setTimeout(closeForm, ms || 60000);
   }
 
-  async function punch(type, reason) {
+  async function punch(type, reason, confirmed) {
     pendingType = type;
+    pendingConfirmed = !!confirmed;
     const no = $('k-no').value.trim(), pin = $('k-pin').value.trim();
     if (!no || !pin) { msg($('k-msg'), '職員番号とPINを入力してください'); return; }
     $('k-in').disabled = $('k-out').disabled = true;
     msg($('k-msg'), '');
     armReset();
     try {
-      const r = await kintaiApi('kioskPunch', { key, no, pin, type, reason: reason || '' });
+      const r = await kintaiApi('kioskPunch', { key, no, pin, type, reason: reason || '', confirm: !!confirmed });
+      // 押し間違いの確認（出勤中に出勤、出勤なしで退勤）
+      if (r.needConfirm) { if (confirm(r.message)) { await punch(type, reason, true); } return; }
       if (r.needReason) { askReason(r.message); return; }
       $('k-form').classList.add('hidden');
       $('k-reason').classList.add('hidden');
@@ -171,7 +174,7 @@
     KINTAI_REASONS.forEach(r => {
       const b = document.createElement('button');
       b.textContent = r;
-      b.onclick = () => { $('k-reason').classList.add('hidden'); punch(pendingType, r); };
+      b.onclick = () => { $('k-reason').classList.add('hidden'); punch(pendingType, r, pendingConfirmed); };
       list.appendChild(b);
     });
     $('k-reason').classList.remove('hidden');
