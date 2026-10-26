@@ -7,53 +7,70 @@
 <title>打刻端末</title>
 <link rel="stylesheet" href="style.css">
 <style>
-  .kiosk { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 760px) { .kiosk { grid-template-columns: 1fr; } }
-  .qrbox { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-  #qr { background: #fff; padding: 16px; border-radius: 12px; width: 312px; height: 312px; }
-  #qr img, #qr canvas { width: 280px !important; height: 280px !important; }
-  .big-clock { font-size: 72px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
-  .date { font-size: 20px; color: var(--muted); }
-  .place { font-size: 26px; font-weight: 700; margin-top: 8px; }
-  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; width: 280px; margin-top: 10px; }
-  .bar > div { height: 100%; background: var(--in); width: 100%; }
+  /* 職員カード（QRコードリーダー）で打刻する端末の画面。スマホでタブレットのQRを読む方式は2026-10-27に廃止 */
+  .kiosk { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  .top { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+  .big-clock { font-size: 96px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  .date { font-size: 26px; color: var(--muted); }
+  .place { font-size: 30px; font-weight: 700; }
+  .guide { text-align: center; padding: 48px 20px; margin-top: 20px; border: 4px dashed var(--line); border-radius: 24px; }
+  .guide .icon { font-size: 88px; line-height: 1; }
+  .guide .main { font-size: 44px; font-weight: 700; margin-top: 16px; line-height: 1.35; }
+  .guide .main strong { color: var(--in); }
+  .guide .sub2 { font-size: 22px; color: var(--muted); margin-top: 14px; }
+  .others { display: flex; gap: 12px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+  .others button { width: auto; min-width: 280px; font-size: 18px; padding: 14px 20px; margin: 0; }
+  .panel { max-width: 560px; margin: 20px auto 0; }
+  .forgot { text-align: center; font-size: 22px; color: var(--muted); margin-top: 22px; }
+  .forgot strong { color: var(--text); }
   /* 職員カードの読み取り結果（画面いっぱいに大きく表示） */
-  .cardpop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 10; }
-  .cardpop .box { background: var(--card); border-radius: 18px; padding: 28px 32px; width: min(560px, 92vw); text-align: center; border: 6px solid var(--line); }
+  .cardpop { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 10; }
+  .cardpop .box { background: var(--card); border-radius: 28px; padding: 40px 44px; width: min(860px, 94vw); text-align: center; border: 10px solid var(--line); }
   .cardpop .box.in { border-color: var(--in); }
   .cardpop .box.out { border-color: var(--out); }
   .cardpop .box.err { border-color: var(--err); }
-  .cardpop .kind { font-size: 56px; font-weight: 700; line-height: 1.15; }
+  .cardpop .name { font-size: 56px; font-weight: 700; line-height: 1.2; }
+  .cardpop .kind { font-size: 120px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .cardpop .box.in .kind { color: var(--in); }
   .cardpop .box.out .kind { color: var(--out); }
-  .cardpop .box.err .kind { color: var(--err); font-size: 30px; }
-  .cardpop .who { font-size: 26px; margin-top: 8px; }
-  .cardpop .sub { font-size: 16px; color: var(--muted); margin-top: 8px; }
-  .cardpop .undo { margin-top: 18px; font-size: 18px; padding: 12px 28px; background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 400; }
+  .cardpop .box.err .kind { color: var(--err); font-size: 40px; line-height: 1.4; }
+  .cardpop .who { font-size: 44px; margin-top: 12px; font-weight: 700; }
+  .cardpop .sub { font-size: 24px; color: var(--muted); margin-top: 12px; }
+  .cardpop .ask { font-size: 28px; margin-top: 18px; }
+  .cardpop .bigbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px; }
+  .cardpop .bigbtns button { font-size: 56px; padding: 40px 8px; border-width: 4px; border-radius: 20px; }
+  .cardpop .cancel { margin-top: 20px; font-size: 26px; padding: 18px; width: 100%; background: transparent; color: var(--muted); border: 2px solid var(--line); font-weight: 400; border-radius: 16px; }
+  .cardpop .undo { margin-top: 24px; font-size: 24px; padding: 16px 32px; background: transparent; color: var(--muted); border: 2px solid var(--line); font-weight: 400; border-radius: 14px; }
+  .cardpop .msg { font-size: 22px; }
+  .cardpop .reason button { font-size: 26px; padding: 20px; }
 </style>
 </head>
 <body>
 <div class="kiosk">
-  <div class="card qrbox">
-    <div id="qr"></div>
-    <div class="bar"><div id="bar"></div></div>
-    <p style="font-size:18px;margin:12px 0 0">スマホのカメラで読み取って打刻</p>
-    <p class="muted" style="margin:4px 0 0">QRコードは1分ごとに切り替わります</p>
-    <div id="k-err"></div>
+  <div class="top">
+    <div>
+      <div class="date" id="k-date"></div>
+      <div class="big-clock" id="k-clock">--:--</div>
+    </div>
+    <div class="place" id="k-place"></div>
+  </div>
+  <div id="k-err"></div>
+
+  <div id="k-start">
+    <div class="guide">
+      <div class="icon">🪪</div>
+      <div class="main">職員カードを<br><strong>QRコードリーダー</strong>にかざしてください</div>
+      <div class="sub2">名前が出たら「出勤」か「退勤」を押します</div>
+    </div>
+    <p class="forgot">カードを忘れたときは、<strong>紙の出勤簿に押印</strong>し、所属長に出勤・退勤の時刻を伝えてください</p>
+    <!-- 職員番号とPINでの打刻・PINの登録は、2026-10-27に画面から外した（カードを忘れた日は紙で対応）。仕組みは残してあり、下の style="display:none" を外せば戻せる -->
+    <div class="others" style="display:none">
+      <button id="k-open" class="b-sub">職員番号とPINで打刻</button>
+      <button id="k-signup-open" class="b-sub">PINの登録</button>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="date" id="k-date"></div>
-    <div class="big-clock" id="k-clock">--:--</div>
-    <div class="place" id="k-place"></div>
-
-    <div id="k-start">
-      <p style="margin-top:20px;font-size:18px">職員カードをお持ちの方は、<strong>QRコードリーダーにかざして</strong>、出勤・退勤を押してください</p>
-      <p class="muted" style="margin-top:16px">スマホ・カードをお持ちでない方・登録前の方はこちら</p>
-      <button id="k-open" class="b-sub" style="font-size:18px;padding:16px">職員番号とPINで打刻</button>
-      <button id="k-signup-open" class="b-sub" style="font-size:16px;padding:14px">はじめての方（登録）</button>
-    </div>
-
+  <div class="panel">
     <div id="k-signup" class="hidden" style="margin-top:16px"></div>
 
     <div id="k-form" class="hidden">
@@ -83,7 +100,6 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="config.js"></script>
 <script src="signup.js"></script>
 <script>
@@ -92,8 +108,7 @@
   const params = new URLSearchParams(location.search);
   if (params.get('key')) kintaiStore.set('kintai_kiosk_key', params.get('key'));
   const key = params.get('key') || kintaiStore.get('kintai_kiosk_key');
-  const punchUrl = new URL('punch.html', location.href).href;
-  let qr = null, refreshAt = 0, period = 60000, pendingType = null, pendingConfirmed = false, resetTimer = null;
+  let pendingType = null, pendingConfirmed = false, resetTimer = null;
 
   function msg(el, text, cls) {
     el.innerHTML = '';
@@ -108,22 +123,16 @@
     const n = new Date();
     $('k-clock').textContent = n.getHours() + ':' + String(n.getMinutes()).padStart(2, '0');
     $('k-date').textContent = `${n.getMonth() + 1}月${n.getDate()}日（${'日月火水木金土'[n.getDay()]}）`;
-    const left = Math.max(0, refreshAt - Date.now());
-    $('bar').style.width = (left / period * 100) + '%';
   }
 
+  // 端末の確認（設置場所の表示と、サーバーにつながるかの確認）。1分ごとに確かめる
   async function refreshQr() {
     if (!key) { msg($('k-err'), '端末キーが設定されていません。URLの末尾に ?key=… を付けて開いてください'); return; }
     try {
       const r = await kintaiApi('kioskToken', { key });
       $('k-place').textContent = r.place;
-      const text = punchUrl + '?t=' + encodeURIComponent(r.token);
-      if (!qr) qr = new QRCode($('qr'), { text, width: 280, height: 280, correctLevel: QRCode.CorrectLevel.M });
-      else qr.makeCode(text);
       msg($('k-err'), '');
-      if (r.windowMs) period = r.windowMs;
-      refreshAt = Date.now() + r.refreshMs;
-      setTimeout(refreshQr, r.refreshMs + 300);
+      setTimeout(refreshQr, 60000);
     } catch (e) {
       msg($('k-err'), e.message + '（10秒後に再接続します）');
       setTimeout(refreshQr, 10000);
@@ -270,13 +279,14 @@
     cardPop('', '<div class="sub">読み取っています…</div>', 15000);
     try {
       const r = await kintaiApi('kioskCardCheck', { key, card: code });
-      const d = cardPop('',
-        '<div class="who" style="font-size:30px;font-weight:700">' + esc(r.name) + ' さん</div>' +
-        '<div class="sub">' + esc(r.last || '') + '</div>' +
-        '<div class="btns" style="margin-top:18px">' +
-        '<button class="b-in' + (r.suggested === '出勤' ? ' primary' : '') + '" id="cardin" style="font-size:26px;padding:22px 8px">出勤</button>' +
-        '<button class="b-out' + (r.suggested === '退勤' ? ' primary' : '') + '" id="cardout" style="font-size:26px;padding:22px 8px">退勤</button></div>' +
-        '<button class="b-sub" id="cardcancel" style="font-size:18px;padding:14px;margin-top:14px">キャンセル</button>', 30000);
+      const d = cardPop(r.suggested === '退勤' ? 'out' : 'in',
+        '<div class="name">' + esc(r.name) + ' さん</div>' +
+        '<div class="sub">' + esc(r.last || 'まだ打刻はありません') + '</div>' +
+        '<div class="ask">押してください</div>' +
+        '<div class="bigbtns">' +
+        '<button class="b-in' + (r.suggested === '出勤' ? ' primary' : '') + '" id="cardin">出勤</button>' +
+        '<button class="b-out' + (r.suggested === '退勤' ? ' primary' : '') + '" id="cardout">退勤</button></div>' +
+        '<button class="cancel" id="cardcancel">キャンセル</button>', 30000);
       d.querySelector('#cardin').onclick = () => cardPunch(code, '出勤');
       d.querySelector('#cardout').onclick = () => cardPunch(code, '退勤');
       d.querySelector('#cardcancel').onclick = closeCardPop;
@@ -296,8 +306,8 @@
       }
       if (r.needReason) {
         const d = cardPop(type === '退勤' ? 'out' : 'in',
-          '<div class="who">' + esc(r.name) + ' さん（' + esc(type) + '）</div><div class="msg warn">' + esc(r.message) + '</div><div class="reason" id="cardreason"></div>' +
-          '<button class="b-sub" id="cardcancel" style="margin-top:12px">キャンセル</button>', 30000);
+          '<div class="name">' + esc(r.name) + ' さん（' + esc(type) + '）</div><div class="msg warn">' + esc(r.message) + '</div><div class="reason" id="cardreason"></div>' +
+          '<button class="cancel" id="cardcancel">キャンセル</button>', 30000);
         KINTAI_REASONS.forEach(x => {
           const b = document.createElement('button');
           b.textContent = x;
