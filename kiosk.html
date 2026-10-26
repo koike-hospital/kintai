@@ -48,7 +48,7 @@
     <div class="place" id="k-place"></div>
 
     <div id="k-start">
-      <p style="margin-top:20px;font-size:18px">職員カードをお持ちの方は、<strong>QRコードリーダーにかざすだけ</strong>で記録されます</p>
+      <p style="margin-top:20px;font-size:18px">職員カードをお持ちの方は、<strong>QRコードリーダーにかざして</strong>、出勤・退勤を押してください</p>
       <p class="muted" style="margin-top:16px">スマホ・カードをお持ちでない方・登録前の方はこちら</p>
       <button id="k-open" class="b-sub" style="font-size:18px;padding:16px">職員番号とPINで打刻</button>
       <button id="k-signup-open" class="b-sub" style="font-size:16px;padding:14px">はじめての方（登録）</button>
@@ -244,7 +244,7 @@
     }
     if (e.key.length === 1) cardBuf += e.key;
     // Enter を送らない設定のリーダー向け：入力が途切れたら読み取り終わりとみなす
-    cardTimer = setTimeout(() => { if (/^K1\./.test(cardBuf) && cardBuf.split('.').length === 4) cardScan(cardBuf); cardBuf = ''; }, 200);
+    cardTimer = setTimeout(() => { if (/K1[.．。]/i.test(cardBuf.normalize('NFKC'))) cardScan(cardBuf); cardBuf = ''; }, 200);
   });
 
   function cardPop(cls, html, ms) {
@@ -265,19 +265,46 @@
   }
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-  async function cardScan(code, reason) {
+  // カードを読んだら：名前と「出勤」「退勤」「キャンセル」を出す（押すべきほうを目立たせる）
+  async function cardScan(code) {
     cardPop('', '<div class="sub">読み取っています…</div>', 15000);
     try {
-      const r = await kintaiApi('kioskCard', { key, card: code, reason: reason || '' });
+      const r = await kintaiApi('kioskCardCheck', { key, card: code });
+      const d = cardPop('',
+        '<div class="who" style="font-size:30px;font-weight:700">' + esc(r.name) + ' さん</div>' +
+        '<div class="sub">' + esc(r.last || '') + '</div>' +
+        '<div class="btns" style="margin-top:18px">' +
+        '<button class="b-in' + (r.suggested === '出勤' ? ' primary' : '') + '" id="cardin" style="font-size:26px;padding:22px 8px">出勤</button>' +
+        '<button class="b-out' + (r.suggested === '退勤' ? ' primary' : '') + '" id="cardout" style="font-size:26px;padding:22px 8px">退勤</button></div>' +
+        '<button class="b-sub" id="cardcancel" style="font-size:18px;padding:14px;margin-top:14px">キャンセル</button>', 30000);
+      d.querySelector('#cardin').onclick = () => cardPunch(code, '出勤');
+      d.querySelector('#cardout').onclick = () => cardPunch(code, '退勤');
+      d.querySelector('#cardcancel').onclick = closeCardPop;
+    } catch (e) {
+      cardPop('err', '<div class="kind">' + esc(e.message) + '</div>', 8000);
+    }
+  }
+
+  async function cardPunch(code, type, reason, confirmed) {
+    cardPop('', '<div class="sub">記録しています…</div>', 15000);
+    try {
+      const r = await kintaiApi('kioskCard', { key, card: code, type, reason: reason || '', confirm: !!confirmed });
+      if (r.needConfirm) {
+        closeCardPop();
+        if (confirm(r.message)) await cardPunch(code, type, reason, true);
+        return;
+      }
       if (r.needReason) {
-        const d = cardPop(r.type === '退勤' ? 'out' : 'in',
-          '<div class="who">' + esc(r.name) + ' さん（' + esc(r.type) + '）</div><div class="msg warn">' + esc(r.message) + '</div><div class="reason" id="cardreason"></div>', 30000);
+        const d = cardPop(type === '退勤' ? 'out' : 'in',
+          '<div class="who">' + esc(r.name) + ' さん（' + esc(type) + '）</div><div class="msg warn">' + esc(r.message) + '</div><div class="reason" id="cardreason"></div>' +
+          '<button class="b-sub" id="cardcancel" style="margin-top:12px">キャンセル</button>', 30000);
         KINTAI_REASONS.forEach(x => {
           const b = document.createElement('button');
           b.textContent = x;
-          b.onclick = () => cardScan(code, x);
+          b.onclick = () => cardPunch(code, type, x, confirmed);
           d.querySelector('#cardreason').appendChild(b);
         });
+        d.querySelector('#cardcancel').onclick = closeCardPop;
         return;
       }
       const cls = r.type === '退勤' ? 'out' : 'in';
@@ -298,7 +325,7 @@
         }
       };
     } catch (e) {
-      cardPop('err', '<div class="kind">' + esc(e.message) + '</div>', 6000);
+      cardPop('err', '<div class="kind">' + esc(e.message) + '</div>', 8000);
     }
   }
 
