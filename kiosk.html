@@ -17,6 +17,19 @@
   .place { font-size: 26px; font-weight: 700; margin-top: 8px; }
   .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; width: 280px; margin-top: 10px; }
   .bar > div { height: 100%; background: var(--in); width: 100%; }
+  /* 職員カードの読み取り結果（画面いっぱいに大きく表示） */
+  .cardpop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 10; }
+  .cardpop .box { background: var(--card); border-radius: 18px; padding: 28px 32px; width: min(560px, 92vw); text-align: center; border: 6px solid var(--line); }
+  .cardpop .box.in { border-color: var(--in); }
+  .cardpop .box.out { border-color: var(--out); }
+  .cardpop .box.err { border-color: var(--err); }
+  .cardpop .kind { font-size: 56px; font-weight: 700; line-height: 1.15; }
+  .cardpop .box.in .kind { color: var(--in); }
+  .cardpop .box.out .kind { color: var(--out); }
+  .cardpop .box.err .kind { color: var(--err); font-size: 30px; }
+  .cardpop .who { font-size: 26px; margin-top: 8px; }
+  .cardpop .sub { font-size: 16px; color: var(--muted); margin-top: 8px; }
+  .cardpop .undo { margin-top: 18px; font-size: 18px; padding: 12px 28px; background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 400; }
 </style>
 </head>
 <body>
@@ -35,7 +48,8 @@
     <div class="place" id="k-place"></div>
 
     <div id="k-start">
-      <p class="muted" style="margin-top:24px">スマホをお持ちでない方・登録前の方はこちら</p>
+      <p style="margin-top:20px;font-size:18px">職員カードをお持ちの方は、<strong>QRコードリーダーにかざすだけ</strong>で記録されます</p>
+      <p class="muted" style="margin-top:16px">スマホ・カードをお持ちでない方・登録前の方はこちら</p>
       <button id="k-open" class="b-sub" style="font-size:18px;padding:16px">職員番号とPINで打刻</button>
       <button id="k-signup-open" class="b-sub" style="font-size:16px;padding:14px">はじめての方（登録）</button>
     </div>
@@ -211,6 +225,83 @@
   $('k-cancel').onclick = closeForm;
   $('k-in').onclick = () => punch('出勤');
   $('k-out').onclick = () => punch('退勤');
+  // ---------------------------------------------------------------- 職員カード（QRコードリーダー）
+  // リーダーは、読み取った文字をキーボードと同じように素早く送ってくる（最後に Enter）。
+  // 入力欄に文字を入れている最中（職員番号・PINなど）は、カードの読み取りとして扱わない
+  let cardBuf = '', cardLast = 0, cardTimer = null, popTimer = null;
+  document.addEventListener('keydown', e => {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    const now = Date.now();
+    if (now - cardLast > 120) cardBuf = '';
+    cardLast = now;
+    clearTimeout(cardTimer);
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (cardBuf.length >= 8) cardScan(cardBuf);
+      cardBuf = '';
+      return;
+    }
+    if (e.key.length === 1) cardBuf += e.key;
+    // Enter を送らない設定のリーダー向け：入力が途切れたら読み取り終わりとみなす
+    cardTimer = setTimeout(() => { if (/^K1\./.test(cardBuf) && cardBuf.split('.').length === 4) cardScan(cardBuf); cardBuf = ''; }, 200);
+  });
+
+  function cardPop(cls, html, ms) {
+    closeCardPop();
+    const d = document.createElement('div');
+    d.className = 'cardpop';
+    d.id = 'cardpop';
+    d.innerHTML = '<div class="box ' + cls + '">' + html + '</div>';
+    d.addEventListener('click', ev => { if (ev.target === d) closeCardPop(); });
+    document.body.appendChild(d);
+    popTimer = setTimeout(closeCardPop, ms || 6000);
+    return d;
+  }
+  function closeCardPop() {
+    clearTimeout(popTimer);
+    const d = $('cardpop');
+    if (d) d.remove();
+  }
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  async function cardScan(code, reason) {
+    cardPop('', '<div class="sub">読み取っています…</div>', 15000);
+    try {
+      const r = await kintaiApi('kioskCard', { key, card: code, reason: reason || '' });
+      if (r.needReason) {
+        const d = cardPop(r.type === '退勤' ? 'out' : 'in',
+          '<div class="who">' + esc(r.name) + ' さん（' + esc(r.type) + '）</div><div class="msg warn">' + esc(r.message) + '</div><div class="reason" id="cardreason"></div>', 30000);
+        KINTAI_REASONS.forEach(x => {
+          const b = document.createElement('button');
+          b.textContent = x;
+          b.onclick = () => cardScan(code, x);
+          d.querySelector('#cardreason').appendChild(b);
+        });
+        return;
+      }
+      const cls = r.type === '退勤' ? 'out' : 'in';
+      const d = cardPop(cls,
+        '<div class="kind">' + esc(r.type) + ' ' + esc(r.time) + '</div><div class="who">' + esc(r.name) + ' さん</div>' +
+        (r.duplicate ? '<div class="sub">' + esc(r.message) + '</div>' : '') +
+        (r.warning ? '<div class="msg warn">' + esc(r.warning) + '</div>' : '') +
+        (!r.duplicate && r.id ? '<button class="undo" id="cardundo">まちがえた場合は「取り消す」（10秒）</button>' : ''),
+        r.duplicate ? 4000 : 10000);
+      const u = d.querySelector('#cardundo');
+      if (u) u.onclick = async () => {
+        u.disabled = true;
+        try {
+          const x = await kintaiApi('kioskUndo', { key, card: code, id: r.id });
+          cardPop('err', '<div class="kind">' + esc(x.message) + '</div><div class="who">' + esc(x.name) + ' さん</div>', 5000);
+        } catch (e) {
+          cardPop('err', '<div class="kind">' + esc(e.message) + '</div>', 6000);
+        }
+      };
+    } catch (e) {
+      cardPop('err', '<div class="kind">' + esc(e.message) + '</div>', 6000);
+    }
+  }
+
   setInterval(tick, 250);
   tick();
   keepAwake();
