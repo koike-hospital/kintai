@@ -111,6 +111,8 @@
   let pendingType = null, pendingConfirmed = false, resetTimer = null;
   // 名簿（職員番号 → 氏名）。カードを読んだ瞬間に名前を出すため、10分ごとに受け取る
   let roster = null, rosterAt = 0;
+  // 職員ごとの押すべきボタンと前回の打刻。1分ごとに受け取り、この端末で打刻したらすぐ書き換える
+  let punchState = null;
 
   function msg(el, text, cls) {
     el.innerHTML = '';
@@ -132,8 +134,9 @@
     if (!key) { msg($('k-err'), '端末キーが設定されていません。URLの末尾に ?key=… を付けて開いてください'); return; }
     try {
       const wantRoster = Date.now() - rosterAt > 600000;
-      const r = await kintaiApi('kioskToken', { key, roster: wantRoster });
+      const r = await kintaiApi('kioskToken', { key, roster: wantRoster, state: true });
       if (r.roster) { roster = r.roster; rosterAt = Date.now(); }
+      if (r.state) punchState = r.state;
       $('k-place').textContent = r.place;
       msg($('k-err'), '');
       setTimeout(refreshQr, 60000);
@@ -291,7 +294,7 @@
     const seq = ++scanSeq;
     const no = cardNoLocal(code);
     const name = roster && no ? roster[no] : '';
-    if (name) return cardScanFast(code, name, seq);
+    if (name) return cardScanFast(code, name, seq, no);
     cardPop('', '<div class="sub">読み取っています…</div>', 15000);
     try {
       const r = await kintaiApi('kioskCardCheck', { key, card: code });
@@ -312,7 +315,17 @@
   }
 
   // 名簿に名前があるとき：すぐに名前とボタンを出し、前回の打刻の確認は裏で行う
-  function cardScanFast(code, name, seq) {
+  // 押すべきボタンに色を付ける（last があれば前回の打刻も書き換える）
+  function applySuggest(d, s, last) {
+    const box = d.querySelector('.box');
+    box.classList.remove('in', 'out');
+    box.classList.add(s === '退勤' ? 'out' : 'in');
+    d.querySelector('#cardin').classList.toggle('primary', s !== '退勤');
+    d.querySelector('#cardout').classList.toggle('primary', s === '退勤');
+    if (last) $('cardlast').textContent = last;
+  }
+
+  function cardScanFast(code, name, seq, no) {
     const d = cardPop('',
       '<div class="name">' + esc(name) + ' さん</div>' +
       '<div class="sub" id="cardlast">前回の打刻を確認しています…</div>' +
@@ -324,11 +337,14 @@
     d.querySelector('#cardin').onclick = () => { scanSeq++; cardPunch(code, '出勤'); };
     d.querySelector('#cardout').onclick = () => { scanSeq++; cardPunch(code, '退勤'); };
     d.querySelector('#cardcancel').onclick = () => { scanSeq++; closeCardPop(); };
+    // 1分ごとに受け取った情報で、すぐに色を付ける（記録がない人は「出勤」）。正しいかは裏の確認で直す
+    if (punchState) {
+      const st = punchState[no];
+      applySuggest(d, st ? st.s : '出勤', st ? st.last : '');
+    }
     kintaiApi('kioskCardCheck', { key, card: code }).then(r => {
       if (seq !== scanSeq || !$('cardpop')) return;
-      $('cardlast').textContent = r.last || 'まだ打刻はありません';
-      d.querySelector('.box').classList.add(r.suggested === '退勤' ? 'out' : 'in');
-      d.querySelector(r.suggested === '退勤' ? '#cardout' : '#cardin').classList.add('primary');
+      applySuggest(d, r.suggested, r.last || 'まだ打刻はありません');
     }).catch(e => {
       // 再発行済みのカードなど：ボタンを押す前なら、エラーに差し替える
       if (seq !== scanSeq || !$('cardpop')) return;
@@ -358,6 +374,11 @@
         d.querySelector('#cardcancel').onclick = closeCardPop;
         return;
       }
+      // この端末で打刻した分は、次にかざしたときの色にすぐ反映する
+      if (punchState && r.type && r.time && !r.duplicate) {
+        const n = new Date();
+        punchState[cardNoLocal(code)] = { s: r.type === '出勤' ? '退勤' : '出勤', last: `前回：${r.type} ${n.getMonth() + 1}/${n.getDate()} ${r.time}` };
+      }
       const cls = r.type === '退勤' ? 'out' : 'in';
       const d = cardPop(cls,
         '<div class="kind">' + esc(r.type) + ' ' + esc(r.time) + '</div><div class="who">' + esc(r.name) + ' さん</div>' +
@@ -370,6 +391,7 @@
         u.disabled = true;
         try {
           const x = await kintaiApi('kioskUndo', { key, card: code, id: r.id });
+          if (punchState) delete punchState[cardNoLocal(code)];   // 取り消したら、次は裏の確認の結果で色を付ける
           cardPop('err', '<div class="kind">' + esc(x.message) + '</div><div class="who">' + esc(x.name) + ' さん</div>', 5000);
         } catch (e) {
           cardPop('err', '<div class="kind">' + esc(e.message) + '</div>', 6000);
