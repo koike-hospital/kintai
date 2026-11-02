@@ -109,6 +109,8 @@
   if (params.get('key')) kintaiStore.set('kintai_kiosk_key', params.get('key'));
   const key = params.get('key') || kintaiStore.get('kintai_kiosk_key');
   let pendingType = null, pendingConfirmed = false, resetTimer = null;
+  // 名簿（職員番号 → 氏名）。カードを読んだ瞬間に名前を出すため、10分ごとに受け取る
+  let roster = null, rosterAt = 0;
 
   function msg(el, text, cls) {
     el.innerHTML = '';
@@ -129,7 +131,9 @@
   async function refreshQr() {
     if (!key) { msg($('k-err'), '端末キーが設定されていません。URLの末尾に ?key=… を付けて開いてください'); return; }
     try {
-      const r = await kintaiApi('kioskToken', { key });
+      const wantRoster = Date.now() - rosterAt > 600000;
+      const r = await kintaiApi('kioskToken', { key, roster: wantRoster });
+      if (r.roster) { roster = r.roster; rosterAt = Date.now(); }
       $('k-place').textContent = r.place;
       msg($('k-err'), '');
       setTimeout(refreshQr, 60000);
@@ -275,7 +279,19 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   // カードを読んだら：名前と「出勤」「退勤」「キャンセル」を出す（押すべきほうを目立たせる）
+  // カードのQRから職員番号を取り出す（名簿で名前を引くためだけに使う。本物かどうかはサーバーで確かめる）
+  function cardNoLocal(code) {
+    const s = String(code).normalize('NFKC').replace(/[。｡．]/g, '.');
+    const m = s.match(/K1\.(\d+)\.\d+\.[0-9a-f]{12}/i);
+    return m ? m[1].replace(/^0+(?=\d)/, '') : '';
+  }
+
+  let scanSeq = 0;   // 読み取りの通し番号（あとから届いた確認の結果が、次の人の画面を書き換えないように）
   async function cardScan(code) {
+    const seq = ++scanSeq;
+    const no = cardNoLocal(code);
+    const name = roster && no ? roster[no] : '';
+    if (name) return cardScanFast(code, name, seq);
     cardPop('', '<div class="sub">読み取っています…</div>', 15000);
     try {
       const r = await kintaiApi('kioskCardCheck', { key, card: code });
@@ -293,6 +309,31 @@
     } catch (e) {
       cardPop('err', '<div class="kind">' + esc(e.message) + '</div>', 8000);
     }
+  }
+
+  // 名簿に名前があるとき：すぐに名前とボタンを出し、前回の打刻の確認は裏で行う
+  function cardScanFast(code, name, seq) {
+    const d = cardPop('',
+      '<div class="name">' + esc(name) + ' さん</div>' +
+      '<div class="sub" id="cardlast">前回の打刻を確認しています…</div>' +
+      '<div class="ask">押してください</div>' +
+      '<div class="bigbtns">' +
+      '<button class="b-in" id="cardin">出勤</button>' +
+      '<button class="b-out" id="cardout">退勤</button></div>' +
+      '<button class="cancel" id="cardcancel">キャンセル</button>', 30000);
+    d.querySelector('#cardin').onclick = () => { scanSeq++; cardPunch(code, '出勤'); };
+    d.querySelector('#cardout').onclick = () => { scanSeq++; cardPunch(code, '退勤'); };
+    d.querySelector('#cardcancel').onclick = () => { scanSeq++; closeCardPop(); };
+    kintaiApi('kioskCardCheck', { key, card: code }).then(r => {
+      if (seq !== scanSeq || !$('cardpop')) return;
+      $('cardlast').textContent = r.last || 'まだ打刻はありません';
+      d.querySelector('.box').classList.add(r.suggested === '退勤' ? 'out' : 'in');
+      d.querySelector(r.suggested === '退勤' ? '#cardout' : '#cardin').classList.add('primary');
+    }).catch(e => {
+      // 再発行済みのカードなど：ボタンを押す前なら、エラーに差し替える
+      if (seq !== scanSeq || !$('cardpop')) return;
+      cardPop('err', '<div class="kind">' + esc(e.message) + '</div>', 8000);
+    });
   }
 
   async function cardPunch(code, type, reason, confirmed) {
