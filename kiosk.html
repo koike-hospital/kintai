@@ -113,6 +113,13 @@
   let roster = null, rosterAt = 0;
   // 職員ごとの押すべきボタンと前回の打刻。1分ごとに受け取り、この端末で打刻したらすぐ書き換える
   let punchState = null;
+  // 自動の再読み込み用（下の「自動の再読み込み」を参照）
+  const AUTO_RELOAD_MS = 60 * 60 * 1000;     // 1時間ごと
+  const IDLE_BEFORE_RELOAD_MS = 20 * 1000;   // 最後の操作から20秒たってから
+  const WAKE_RELOAD_MS = 5 * 60 * 1000;      // 5分以上画面が隠れていたあと、戻ったとき
+  const OFFLINE_RELOAD_MS = 3 * 60 * 1000;   // サーバーにつながらない状態が3分続いたとき
+  const loadedAt = Date.now();
+  let lastActive = Date.now(), hiddenAt = 0, failSince = 0;
 
   function msg(el, text, cls) {
     el.innerHTML = '';
@@ -139,9 +146,12 @@
       if (r.state) punchState = r.state;
       $('k-place').textContent = r.place;
       msg($('k-err'), '');
+      failSince = 0;
       setTimeout(refreshQr, 60000);
     } catch (e) {
       msg($('k-err'), e.message + '（10秒後に再接続します）');
+      if (!failSince) failSince = Date.now();
+      if (Date.now() - failSince >= OFFLINE_RELOAD_MS) autoReload();   // つながらない状態が続くときも、画面を読み込み直してみる
       setTimeout(refreshQr, 10000);
     }
   }
@@ -401,6 +411,34 @@
       cardPop('err', '<div class="kind">' + esc(e.message) + '</div>', 8000);
     }
   }
+
+  // ---------------------------------------------------------------- 自動の再読み込み
+  // iPad は、長く開いたままにしたり、スリープ・通信の切れから戻ったりすると、画面が止まったり古いままになったりすることがある。
+  // 打刻の途中を邪魔しないよう、誰も操作していないときだけ、画面を読み込み直す。
+  // 通信が切れているときに読み込み直すとエラー画面で止まるので、画面のファイルが取れることを確かめてから行う
+  ['keydown', 'pointerdown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => { lastActive = Date.now(); }, true));
+  function isIdle() {
+    return Date.now() - lastActive >= IDLE_BEFORE_RELOAD_MS && !cardBuf && !$('cardpop') &&
+      ['k-form', 'k-signup', 'k-done', 'k-reason'].every(id => $(id).classList.contains('hidden'));
+  }
+  let reloading = false;
+  async function autoReload() {
+    if (reloading || !isIdle()) return;
+    reloading = true;
+    try {
+      const r = await fetch(location.pathname + '?r=' + Date.now(), { cache: 'no-store' });
+      if (r.ok && isIdle()) { location.reload(); return; }
+    } catch (e) { /* つながらない：あとでやり直す */ }
+    reloading = false;
+  }
+  setInterval(() => { if (Date.now() - loadedAt >= AUTO_RELOAD_MS) autoReload(); }, 15000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    if (hiddenAt && Date.now() - hiddenAt >= WAKE_RELOAD_MS) autoReload();
+    hiddenAt = 0;
+  });
+  window.addEventListener('online', () => autoReload());
+  window.addEventListener('pageshow', e => { if (e.persisted) autoReload(); });
 
   setInterval(tick, 250);
   tick();
