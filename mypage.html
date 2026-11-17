@@ -294,7 +294,7 @@ function renderChangePin(){
 const TABS = {
   '職員': [['mine','わたしの打刻'],['req','申請の状況']],
   '部門長': [['q','了承待ち'],['miss','部署の打刻漏れ'],['mine','自分の打刻'],['req','自分の申請']],
-  '事務局': [['apply','反映待ち'],['waiting','了承待ち・差し戻し'],['done','反映済み'],['staff','職員の打刻'],['mine','自分の打刻'],['req','自分の申請']],
+  '事務局': [['apply','反映待ち'],['waiting','差し戻し'],['done','反映済み'],['staff','職員の打刻'],['mine','自分の打刻'],['req','自分の申請']],
 };
 function start(){ S.tab = TABS[S.me.role][0][0]; S.ym = ymOf(new Date()); load(); }
 function isWide(){ return S.me.role === '事務局' && ['apply','waiting','done'].includes(S.tab); }
@@ -337,7 +337,7 @@ function body(){
     case 'q': return bossQueueHtml();
     case 'miss': return bossMissHtml();
     case 'apply': return officeApplyHtml();
-    case 'waiting': return tableHtml(S.office ? S.office.waiting : [], false, '部門長の了承を待っている申請・差し戻した申請です（事務局の操作は不要）');
+    case 'waiting': return tableHtml(S.office ? S.office.waiting : [], false, '差し戻した申請です（本人が直して出し直すのを待っています。事務局の操作は不要）');
     case 'done': return tableHtml(S.office ? S.office.done : [], false, '反映済みの申請（新しい順・100件まで）');
     case 'staff': return officeStaffHtml();
   }
@@ -556,7 +556,7 @@ function officeApplyHtml(){
   const q = S.office ? S.office.apply : [];
   if (!q.length) return '<div class="card empty">✓ 反映待ちの申請はありません</div>';
   const can = q.filter(r=>r.canApply);
-  return `<p class="sub">部門長が了承した申請と、部門長本人などの申請です。内容を見て、まとめて打刻ログに反映します。自分の申請はほかの事務局の人が反映します。</p>` +
+  return `<p class="sub">部門長が了承した申請と、部門長本人などの申請です。内容を見て、まとめて打刻ログに反映します。「了承待ち」の申請も、事務局が代わりに了承して反映・差し戻しできます。自分の申請はほかの事務局の人が反映します。</p>` +
     tableHtml(q, true) +
     `<div class="bar"><b>${S.sel.size} 件 選択中</b><span class="sp" style="flex:1"></span>
       <button class="btn out" id="officeBack" ${S.sel.size===1?'':'disabled'}>差し戻す</button>
